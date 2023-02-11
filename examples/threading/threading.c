@@ -80,11 +80,12 @@ if(ret!= 0)
 {   
 perror("pthread_create");
 ERROR_LOG("thread creation failed");
+free(thread_enter);
 return false;
 }
 if(ret==0)
 {
-return true;   
+return true;  
 }
 
 return false;
