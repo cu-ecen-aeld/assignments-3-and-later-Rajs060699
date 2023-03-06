@@ -67,14 +67,14 @@ static void signal_handler (int signal)
 		syslog(LOG_DEBUG,"Caught Signal SIGTERM, exiting");
 		
 	}
-	else if(signal==SIGALRM)
+	/*else if(signal==SIGALRM)
 	{
 		syslog(LOG_DEBUG,"Caught Signal SIGALRM, exiting");
-	}
+	}*/
 	
 
-	//shutdown(socket_fd, SHUT_RDWR);
- 	//shutdown(accept_fd, SHUT_RDWR);
+	shutdown(socket_fd, SHUT_RDWR);
+ 	shutdown(accept_fd, SHUT_RDWR);
  	close(socket_fd);
  	close(accept_fd);
  	close(open_fd);
@@ -170,7 +170,21 @@ void alarm_handler ()
 	
 	
 }
+void signal_init()
+{
+	if (signal(SIGINT, signal_handler) == SIG_ERR)
+	{
+		syslog(LOG_ERR,"Error in handling SIGINT");
+		exit(-1);
+	}
+	if (signal(SIGTERM, signal_handler) == SIG_ERR)
+	{
+		syslog(LOG_ERR,"Error in handling SIGINT");
+		exit(-1);
+	}
 
+
+}
 void *thread_func(void *thread_param)
 {
 
@@ -193,7 +207,7 @@ void *thread_func(void *thread_param)
 	}
 	memset(receive_buffer,0,BUFFER_SIZE);
  
-        //memset(temp_buffer, 0, BUFFER_SIZE);
+        memset(temp_buffer, 0, BUFFER_SIZE);
         
         while (!packet_complete)
         	{
@@ -317,9 +331,10 @@ int main(int argc,  char *argv[])
 	int status=0;
 	
 	SLIST_INIT(&head);
-	
-        signal(SIGINT , signal_handler);
-        signal(SIGTERM , signal_handler);
+	signal_init();
+
+       // signal(SIGINT , signal_handler);
+        //signal(SIGTERM , signal_handler);
 	openlog(NULL , 0 , LOG_USER);
 	printf("Welcome to Socket \n");
 	memset(&hints, 0, sizeof hints); 
@@ -353,12 +368,12 @@ int main(int argc,  char *argv[])
        }
         
        freeaddrinfo(result);
-       /*if(temp_ptr == NULL)
+       if(temp_ptr == NULL)
        {
        	syslog(LOG_DEBUG,"ERROR: bind() fail");
        	exit(-1);
        
-       }*/
+       }
 	if( argc > 1 && !strcmp("-d", argv[1]) ) 
 	{
 		syslog(LOG_INFO, "Run as daemon");
@@ -425,7 +440,7 @@ int main(int argc,  char *argv[])
         	
         	
 	}
-	closelog();
+	//closelog();
 }
 
 
