@@ -1,4 +1,19 @@
+/***********************************
+//File systemcalls.c
+//Author Rajesh Srirangam
+//Date Feb 4,2023
+//File Description Used for system calls initialisation
+***************************************/
+
+/************HEADERS***************/
 #include "systemcalls.h"
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+/*********************************/
 
 /**
  * @param cmd the command to execute with system()
@@ -17,7 +32,14 @@ bool do_system(const char *cmd)
  *   or false() if it returned a failure
 */
 
+    if(system(cmd)==-1)                          //Command Processor is verified here
+    {
+    return false;
+    }
+    else
+    {
     return true;
+    }
 }
 
 /**
@@ -58,6 +80,32 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+pid_t ret_value=fork();          //Child process is created                                 
+int val;
+if(ret_value==-1)                //Child process is unsuccessful
+{
+	exit (-1);
+}
+else if(ret_value==0)           //Child process is successful
+{
+	if(execv(command[0],command)==-1) //Child process execution is failed
+	{
+		exit (-1);
+	}
+}		
+else{
+	if(waitpid(ret_value,&val,0)==-1)  //Wait for child process
+	{
+		return false;
+		}
+	if(WIFEXITED(val))      //Here child process is terminated normally
+		{
+			if(WEXITSTATUS(val)!=0) //Here process exit failed
+			{
+				return false;
+			}
+		}
+	}
 
     va_end(args);
 
@@ -92,6 +140,38 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+
+pid_t ret_value=fork();
+int val;
+if(ret_value==-1)            //Child process is unsuccessful
+{
+	exit (-1);
+}
+else if(ret_value==0)        //Child process is successful
+{
+	int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);  //open() system call opens the file specified by pathname
+	if (fd < 0) { perror("open"); abort(); } //file open failed
+	if (dup2(fd, 1) < 0) { perror("dup2"); abort(); } //dup() system call allocates a new file
+	close(fd);
+	if(execv(command[0],command)==-1) //child execution fail
+	{
+		exit (-1);
+	}
+}		
+else{
+	if(waitpid(ret_value,&val,0)==-1) //Check child process pid argument has changed the state or not
+	{
+		return false;
+		}
+	if(WIFEXITED(val))               //Here child process is terminated normally
+		{
+			if(WEXITSTATUS(val)!=0) //Here process exit failed
+			{
+				return false;
+			}
+		}
+	}
+
 
     va_end(args);
 
