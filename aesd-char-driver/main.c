@@ -30,11 +30,11 @@ struct aesd_dev aesd_device;
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
-	PDEBUG("open");
-	struct aesd_dev *dev;
-	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
-	filp->private_data = dev;
-	return 0;
+    struct aesd_dev *dev;
+    PDEBUG("open");
+    dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+    filp->private_data = dev;
+    return 0;
 }
 
 int aesd_release(struct inode *inode, struct file *filp)
@@ -96,11 +96,11 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	const char* removed_entry = NULL;
 	int mutex_status=0;
 	
-	struct aesd_dev* dev = NULL;
-	dev = (filp->private_data);
+	struct aesd_dev* device = NULL;
+	device = (filp->private_data);
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	
-	mutex_status = mutex_lock_interruptible(&dev->mutex1);
+	mutex_status = mutex_lock_interruptible(&device->mutex1);
 	if (mutex_status)              /*Return 0 if mutex obtained*/
 	{	
 		value= -ERESTARTSYS;				/*Kernel can re-execute when there is some interruption*/
@@ -111,22 +111,22 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		PDEBUG("Mutex Acquired"); 
 	}
 	/*If the input size is zero, alloc or use realloc if size is gretater than zero*/
-	if (dev->write_entry_value.size == 0)
+	if (device->write_entry_value.size == 0)
 	{
-		dev->write_entry_value.buffptr = kzalloc(count,GFP_KERNEL);
+		device->write_entry_value.buffptr = kzalloc(count,GFP_KERNEL);
 	}
 	else
 	{
-		dev->write_entry_value.buffptr = krealloc(dev->write_entry_value.buffptr, dev->write_entry_value.size + count, GFP_KERNEL);
+		device->write_entry_value.buffptr = krealloc(device->write_entry_value.buffptr, device->write_entry_value.size + count, GFP_KERNEL);
 	}
 		
 	/*kalloc error condition*/
-	if (dev->write_entry_value.buffptr == NULL)
+	if (device->write_entry_value.buffptr == NULL)
 	{ 
 		goto exit;
 	}
 
-	bytes_not_copied = copy_from_user((void *)(&dev->write_entry_value.buffptr[dev->write_entry_value.size]), buf, count); /*Storing content to kernel space from user space buffer*/
+	bytes_not_copied = copy_from_user((void *)(&device->write_entry_value.buffptr[device->write_entry_value.size]), buf, count); /*Storing content to kernel space from user space buffer*/
 	
 	
 	value=count;					/*Return value for Complete write */
@@ -134,20 +134,20 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	{
 		value = value - bytes_not_copied;		/*Return value for partial write*/
 	}
-	dev->write_entry_value.size = dev->write_entry_value.size + (count - bytes_not_copied);
+	device->write_entry_value.size = device->write_entry_value.size + (count - bytes_not_copied);
 	
 	/*Using strchr, check if new line is present*/
-	if (strchr((char *)(dev->write_entry_value.buffptr), '\n')) 
+	if (strchr((char *)(device->write_entry_value.buffptr), '\n')) 
 	{
 
-		removed_entry = aesd_circular_buffer_add_entry(&dev->buffer, &dev->write_entry_value);
+		removed_entry = aesd_circular_buffer_add_entry(&device->buffer, &device->write_entry_value);
        	kfree(removed_entry);
-        	dev->write_entry_value.buffptr = 0;
-		dev->write_entry_value.size = 0;
+        	device->write_entry_value.buffptr = 0;
+		device->write_entry_value.size = 0;
 	}
 
   exit:
-  	mutex_unlock(&dev->mutex1);
+  	mutex_unlock(&device->mutex1);
 	return value;
 
 	
@@ -203,8 +203,9 @@ int aesd_init_module(void)
 
 void aesd_cleanup_module(void)
 {
+dev_t devno = 0;
 	PDEBUG("Clean and Exit");
-	dev_t devno = MKDEV(aesd_major, aesd_minor);
+	devno = MKDEV(aesd_major, aesd_minor);
 	cdev_del(&aesd_device.cdev);
 	aesd_circular_buffer_exit(&aesd_device.buffer);
 	mutex_destroy(&aesd_device.mutex1);
