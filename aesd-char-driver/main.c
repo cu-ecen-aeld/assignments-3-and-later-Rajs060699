@@ -23,7 +23,7 @@
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
-MODULE_AUTHOR("Rajesh"); /** TODO: fill in the name **/
+MODULE_AUTHOR("Rajesh Srirangam"); /** TODO: fill in the name **/
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
@@ -45,72 +45,67 @@ int aesd_release(struct inode *inode, struct file *filp)
 ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t value = 0;
+	ssize_t read_value = 0;
 	ssize_t offset=0;			
-	int bytes_available=0;  
+	int available_bytes=0;  
 	int bytes_read=0;
-	int mutex_status=0;
 	 
 	struct aesd_dev *dev = filp->private_data; 
 	struct aesd_buffer_entry* buffer_entry = NULL;
 	
-	PDEBUG("Bytes read %zu with offset %lld",count,*f_pos); 
-	mutex_status = mutex_lock_interruptible(&dev->mutex1);
-	if (mutex_status)			/*Return 0 if mutex obtained*/
+	PDEBUG("Bytes read %zu with offset %lld",count,*f_pos);
+	
+	if (mutex_lock_interruptible(&dev->mutex1))			
 	{
-		return -ERESTARTSYS;   /*Kernel can re-execute when there is some interruption*/
+		return -ERESTARTSYS;   
 	}
-	else if(mutex_status == 0)
-	{
-		PDEBUG("Mutex Acquired"); 
-	}	
+
 	buffer_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer, *f_pos, &offset);
 	if(buffer_entry == NULL)
 	{
 		goto exit;
 	}
-	bytes_available = buffer_entry->size - offset; /*Calulating the total bytes available which can be read*/
-	bytes_read=bytes_available;		/*Complete read */
-	if(count < bytes_available)		/* Partial read */
+	
+	available_bytes = buffer_entry->size - offset; 
+	if(count < available_bytes)		
 	{
 		bytes_read=count;
 	}
+	else
+	{ 
+	   bytes_read = available_bytes;
+	}
+	
 	if (copy_to_user(buf , (buffer_entry->buffptr + offset), bytes_read)) /*Storing content of kernel space to user space in buffer*/
 	{
-		value = -EFAULT;
+		read_value= -EFAULT;
 		goto exit;
 	}
 	
 	*f_pos += bytes_read;				/*Updating file pointer*/
-	value = bytes_read;		
+	read_value = bytes_read;		
 	exit:
-			mutex_unlock(&dev->mutex1);
-			return value;
+		mutex_unlock(&dev->mutex1);
+		return read_value;
 }
 
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t value ;
-	size_t bytes_not_copied ;
-	const char* removed_entry = NULL;
-	int mutex_status=0;
-	
+	ssize_t write_value ;
+	size_t error_bytes_copy ;
+	const char* ret = NULL;
+	int status=0;
 	struct aesd_dev* device = NULL;
 	device = (filp->private_data);
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	
-	mutex_status = mutex_lock_interruptible(&device->mutex1);
-	if (mutex_status)              /*Return 0 if mutex obtained*/
+	status = mutex_lock_interruptible(&device->mutex1);
+	if (status)              
 	{	
-		value= -ERESTARTSYS;				/*Kernel can re-execute when there is some interruption*/
+		write_value= -ERESTARTSYS;				
 		goto exit;
 	}
-	else if(mutex_status == 0)
-	{
-		PDEBUG("Mutex Acquired"); 
-	}
-	/*If the input size is zero, alloc or use realloc if size is gretater than zero*/
 	if (device->write_entry_value.size == 0)
 	{
 		device->write_entry_value.buffptr = kzalloc(count,GFP_KERNEL);
@@ -120,39 +115,34 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		device->write_entry_value.buffptr = krealloc(device->write_entry_value.buffptr, device->write_entry_value.size + count, GFP_KERNEL);
 	}
 		
-	/*kalloc error condition*/
 	if (device->write_entry_value.buffptr == NULL)
 	{ 
 		goto exit;
 	}
-
-	bytes_not_copied = copy_from_user((void *)(&device->write_entry_value.buffptr[device->write_entry_value.size]), buf, count); /*Storing content to kernel space from user space buffer*/
-	
-	
-	value=count;					/*Return value for Complete write */
-	if(bytes_not_copied)
+        write_value=count;
+	error_bytes_copy = copy_from_user((void *)(&device->write_entry_value.buffptr[device->write_entry_value.size]), buf, count);
+	if(error_bytes_copy)
 	{
-		value = value - bytes_not_copied;		/*Return value for partial write*/
+		write_value = write_value - error_bytes_copy;		
 	}
-	device->write_entry_value.size = device->write_entry_value.size + (count - bytes_not_copied);
 	
-	/*Using strchr, check if new line is present*/
+	device->write_entry_value.size = device->write_entry_value.size + (count - error_bytes_copy);
 	if (strchr((char *)(device->write_entry_value.buffptr), '\n')) 
 	{
-
-		removed_entry = aesd_circular_buffer_add_entry(&device->buffer, &device->write_entry_value);
-       	kfree(removed_entry);
-        	device->write_entry_value.buffptr = 0;
+		ret= aesd_circular_buffer_add_entry(&device->buffer, &device->write_entry_value);
+        if(ret)
+	   {
+	      kfree(ret);
+	   }
+	 
+        device->write_entry_value.buffptr = 0;
 		device->write_entry_value.size = 0;
 	}
 
-  exit:
+    exit:
   	mutex_unlock(&device->mutex1);
-	return value;
-
-	
+	return write_value;	
 }
-
 
 struct file_operations aesd_fops = {
 	.owner =    THIS_MODULE,
@@ -176,8 +166,6 @@ static int aesd_setup_cdev(struct aesd_dev *dev)
 	return err;
 }
 
-
-
 int aesd_init_module(void)
 {
 	dev_t dev = 0;
@@ -194,16 +182,16 @@ int aesd_init_module(void)
 	mutex_init(&aesd_device.mutex1);
 	result = aesd_setup_cdev(&aesd_device);
 
-	if( result ) {
+	if( result )
+	{
 		unregister_chrdev_region(dev, 1);
 	}
 	return result;
-
 }
 
 void aesd_cleanup_module(void)
 {
-dev_t devno = 0;
+        dev_t devno = 0;
 	PDEBUG("Clean and Exit");
 	devno = MKDEV(aesd_major, aesd_minor);
 	cdev_del(&aesd_device.cdev);
@@ -211,8 +199,6 @@ dev_t devno = 0;
 	mutex_destroy(&aesd_device.mutex1);
 	unregister_chrdev_region(devno, 1);
 }
-
-
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
