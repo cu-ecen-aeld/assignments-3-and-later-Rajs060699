@@ -34,6 +34,14 @@ Reference   : https://beej.us/guide/bgnet/html/
 #define BUFFER_SIZE 512
 /********************/
 
+#define USE_AESD_CHAR_DEVICE 1
+
+#ifdef USE_AESD_CHAR_DEVICE
+#define PATH "/dev/aesdchar"
+#else
+#define PATH "/var/tmp/aesdsocketdata"
+#endif
+
 int socket_fd = 0, accept_fd = 0,open_fd=0;
 char *receive_buffer = NULL;
 char *chec_ptr=NULL;
@@ -122,7 +130,7 @@ void daemon_create()
   dup (0);
   dup (0);				
 }
-
+ #ifndef USE_AESD_CHAR_DEVICE
 
 void alarm_handler ()
 {
@@ -316,12 +324,12 @@ void *thread_func(void *thread_param)
 
 int main(int argc,  char *argv[])
 {
-	struct itimerval delay;
+	/*struct itimerval delay;
 	signal (SIGALRM, alarm_handler);
 	delay.it_value.tv_sec =10;
 	delay.it_interval.tv_sec=10;
 	delay.it_value.tv_usec =0;
-	delay.it_interval.tv_usec=0;
+	delay.it_interval.tv_usec=0;*/
 	
 	struct addrinfo hints;
 	struct addrinfo *result, *temp_ptr;  	
@@ -387,19 +395,27 @@ int main(int argc,  char *argv[])
         
         }
         
-       	open_fd = creat("/var/tmp/aesdsocketdata", 0644);
-        	if (open_fd == -1)
+       	
+        	open_fd = creat(PATH, 0644);
+        	if (fd == -1)
         	{
-        		syslog(LOG_ERR,"File cannot be created");
+        		syslog(LOG_ERR,"File could not be created");
         		exit(-1);        	
         	}
-      
+      #ifndef USE_AESD_CHAR_DEVICE
+        struct itimerval delay;
+	signal (SIGALRM, alarm_handler);
+	delay.it_value.tv_sec =10;
+	delay.it_interval.tv_sec=10;
+	delay.it_value.tv_usec =0;
+	delay.it_interval.tv_usec=0;
       	status = setitimer (ITIMER_REAL, &delay, NULL);
 	if(status)
 	{
-		syslog(LOG_ERR, "Error in timer set");
+		syslog(LOG_ERR, "Error setting timer");
 		exit (-1);
 	}
+	#endif
 	
 	status = pthread_mutex_init(&mutex1, NULL);
 	if (status != 0)
